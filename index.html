@@ -336,9 +336,8 @@ CREATE POLICY "Public kayitlar" ON gunluk_kayitlar FOR ALL USING (true) WITH CHE
       </div>
       <div class="form-group">
         <label for="record-subject">Ders</label>
-        <select id="record-subject" class="input-field">
-          <option value="">Ders seçin...</option>
-        </select>
+        <input type="text" id="record-subject" class="input-field" placeholder="Matematik, Türkçe, Fen..." list="dersler-list" autocomplete="off">
+        <datalist id="dersler-list"></datalist>
       </div>
       <div class="form-group">
         <label for="record-count">Soru Sayısı</label>
