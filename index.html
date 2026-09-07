@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoruTakip – Günlük Çalışma Takibi</title>
+  <meta name="description" content="Günlük çözülen soru sayılarını ve dersleri Supabase ile takip et.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- ─────────────── SETUP MODAL ─────────────── -->
+  <div id="setup-modal" class="overlay" style="display:none;">
+    <div class="modal-box setup-box">
+      <div class="setup-logo">📚</div>
+      <h2>SoruTakip'e Hoş Geldin</h2>
+      <p class="setup-desc">Başlamadan önce Supabase proje bilgilerini gir.</p>
+
+      <div class="form-group">
+        <label for="setup-url">Supabase URL</label>
+        <input type="text" id="setup-url" class="input-field" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      </div>
+      <div class="form-group">
+        <label for="setup-key">Anon Key</label>
+        <input type="text" id="setup-key" class="input-field" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+      <button class="btn btn-primary btn-full" id="setup-connect-btn" onclick="saveSetup()">
+        <i class="fas fa-plug"></i> Bağlan
+      </button>
+
+      <details class="sql-details">
+        <summary><i class="fas fa-database"></i> SQL Kurulum Kodu (tıkla)</summary>
+        <pre id="sql-code-setup" class="sql-code">-- 1. Dersler tablosu
+CREATE TABLE dersler (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ad TEXT NOT NULL,
+  renk TEXT DEFAULT '#6366f1',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Günlük kayıtlar tablosu
+CREATE TABLE gunluk_kayitlar (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tarih DATE NOT NULL DEFAULT CURRENT_DATE,
+  ders_id UUID REFERENCES dersler(id) ON DELETE CASCADE,
+  soru_sayisi INTEGER NOT NULL DEFAULT 0,
+  not_metni TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Row Level Security (public erişim)
+ALTER TABLE dersler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gunluk_kayitlar ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public dersler" ON dersler FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public kayitlar" ON gunluk_kayitlar FOR ALL USING (true) WITH CHECK (true);</pre>
+        <button class="btn btn-sm btn-ghost" onclick="copySQL('sql-code-setup')">
+          <i class="fas fa-copy"></i> Kopyala
+        </button>
+      </details>
+    </div>
+  </div>
+
+  <!-- ─────────────── SIDEBAR ─────────────── -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-emoji">📚</span>
+      <span class="logo-text">SoruTakip</span>
+    </div>
+
+    <ul class="nav-list">
+      <li>
+        <a href="#" class="nav-link active" data-page="dashboard" onclick="navigate('dashboard', event)">
+          <i class="fas fa-fire-flame-curved"></i>
+          <span>Bugün</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="history" onclick="navigate('history', event)">
+          <i class="fas fa-calendar-days"></i>
+          <span>Geçmiş</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="stats" onclick="navigate('stats', event)">
+          <i class="fas fa-chart-line"></i>
+          <span>İstatistikler</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="subjects" onclick="navigate('subjects', event)">
+          <i class="fas fa-book-open"></i>
+          <span>Dersler</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <a href="#" class="nav-link" data-page="settings" onclick="navigate('settings', event)">
+        <i class="fas fa-gear"></i>
+        <span>Ayarlar</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Mobile hamburger -->
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+  </button>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ─────────────── MAIN CONTENT ─────────────── -->
+  <main class="main">
+
+    <!-- ── BUGÜN ── -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Bugün</h1>
+          <p class="page-subtitle" id="today-date-label">—</p>
+        </div>
+        <button class="btn btn-primary" onclick="openRecordModal()">
+          <i class="fas fa-plus"></i> Kayıt Ekle
+        </button>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon"><i class="fas fa-pen-nib"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpi-total">0</div>
+            <div class="kpi-label">Toplam Soru</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon"><i class="fas fa-book"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpi-subjects">0</div>
+            <div class="kpi-label">Ders Sayısı</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-pink">
+          <div class="kpi-icon"><i class="fas fa-fire"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpi-streak">0</div>
+            <div class="kpi-label">Gün Serisi 🔥</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today records -->
+      <div class="section-header">
+        <h2 class="section-title">Bugünkü Kayıtlar</h2>
+      </div>
+      <div id="today-records" class="records-grid">
+        <div class="empty-state">
+          <div class="empty-emoji">📖</div>
+          <p>Henüz kayıt yok.<br>Yukarıdan ekle!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── GEÇMİŞ ── -->
+    <div id="page-history" class="page">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Geçmiş</h1>
+          <p class="page-subtitle">Tüm günlük kayıtların</p>
+        </div>
+        <input type="month" id="history-month" class="input-field input-month" onchange="loadHistory()">
+      </div>
+      <div id="history-container" class="history-container">
+        <div class="empty-state">
+          <div class="empty-emoji">📅</div>
+          <p>Bu ay kayıt bulunamadı.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── İSTATİSTİKLER ── -->
+    <div id="page-stats" class="page">
+      <div class="page-header">
+        <h1 class="page-title">İstatistikler</h1>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon"><i class="fas fa-hashtag"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="stat-total">0</div>
+            <div class="kpi-label">Toplam Soru</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon"><i class="fas fa-calendar-check"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="stat-days">0</div>
+            <div class="kpi-label">Çalışma Günü</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-pink">
+          <div class="kpi-icon"><i class="fas fa-star"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="stat-avg">0</div>
+            <div class="kpi-label">Günlük Ortalama</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon"><i class="fas fa-trophy"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="stat-best">0</div>
+            <div class="kpi-label">En İyi Gün</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3 class="chart-title">Son 14 Gün – Soru Sayısı</h3>
+          <div class="chart-wrap">
+            <canvas id="daily-chart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">Derse Göre Dağılım</h3>
+          <div class="chart-wrap chart-wrap-donut">
+            <canvas id="subject-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DERSLER ── -->
+    <div id="page-subjects" class="page">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Dersler</h1>
+          <p class="page-subtitle">Derslerini yönet</p>
+        </div>
+        <button class="btn btn-primary" onclick="openSubjectModal()">
+          <i class="fas fa-plus"></i> Ders Ekle
+        </button>
+      </div>
+      <div id="subjects-grid" class="subjects-grid">
+        <div class="empty-state">
+          <div class="empty-emoji">📚</div>
+          <p>Henüz ders eklenmedi.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AYARLAR ── -->
+    <div id="page-settings" class="page">
+      <div class="page-header">
+        <h1 class="page-title">Ayarlar</h1>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <i class="fas fa-database"></i>
+          <h3>Supabase Bağlantısı</h3>
+        </div>
+        <div class="form-group">
+          <label for="settings-url">Supabase URL</label>
+          <input type="text" id="settings-url" class="input-field" placeholder="https://xxxxxxxxxxxx.supabase.co">
+        </div>
+        <div class="form-group">
+          <label for="settings-key">Anon Key</label>
+          <input type="text" id="settings-key" class="input-field" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+        </div>
+        <div class="form-row">
+          <button class="btn btn-primary" onclick="saveSettings()">
+            <i class="fas fa-save"></i> Kaydet & Yeniden Bağlan
+          </button>
+          <button class="btn btn-ghost" onclick="testConnection()">
+            <i class="fas fa-wifi"></i> Bağlantıyı Test Et
+          </button>
+        </div>
+        <div id="connection-status"></div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <i class="fas fa-terminal"></i>
+          <h3>SQL Kurulum Kodu</h3>
+        </div>
+        <p style="color:var(--text-muted);margin-bottom:1rem;font-size:.875rem;">
+          Bu kodu Supabase → SQL Editor'ünde çalıştır:
+        </p>
+        <pre id="sql-code-settings" class="sql-code">-- 1. Dersler tablosu
+CREATE TABLE dersler (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ad TEXT NOT NULL,
+  renk TEXT DEFAULT '#6366f1',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Günlük kayıtlar tablosu
+CREATE TABLE gunluk_kayitlar (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  tarih DATE NOT NULL DEFAULT CURRENT_DATE,
+  ders_id UUID REFERENCES dersler(id) ON DELETE CASCADE,
+  soru_sayisi INTEGER NOT NULL DEFAULT 0,
+  not_metni TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Row Level Security (public erişim)
+ALTER TABLE dersler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gunluk_kayitlar ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public dersler" ON dersler FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public kayitlar" ON gunluk_kayitlar FOR ALL USING (true) WITH CHECK (true);</pre>
+        <button class="btn btn-ghost" onclick="copySQL('sql-code-settings')">
+          <i class="fas fa-copy"></i> Kopyala
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ─────────────── KAYIT MODAL ─────────────── -->
+  <div id="record-modal" class="overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="record-modal-title">Soru Kaydı Ekle</h3>
+        <button class="close-btn" onclick="closeModal('record-modal')"><i class="fas fa-xmark"></i></button>
+      </div>
+      <input type="hidden" id="editing-record-id">
+      <div class="form-group">
+        <label for="record-date">Tarih</label>
+        <input type="date" id="record-date" class="input-field">
+      </div>
+      <div class="form-group">
+        <label for="record-subject">Ders</label>
+        <select id="record-subject" class="input-field">
+          <option value="">Ders seçin...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="record-count">Soru Sayısı</label>
+        <input type="number" id="record-count" class="input-field" placeholder="0" min="0" max="9999">
+      </div>
+      <div class="form-group">
+        <label for="record-note">Not <span class="optional-tag">isteğe bağlı</span></label>
+        <input type="text" id="record-note" class="input-field" placeholder="Konu, bölüm, sayfa vb...">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('record-modal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveRecord()" id="save-record-btn">
+          <i class="fas fa-check"></i> Kaydet
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── DERS MODAL ─────────────── -->
+  <div id="subject-modal" class="overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="subject-modal-title">Ders Ekle</h3>
+        <button class="close-btn" onclick="closeModal('subject-modal')"><i class="fas fa-xmark"></i></button>
+      </div>
+      <input type="hidden" id="editing-subject-id">
+      <div class="form-group">
+        <label for="subject-name">Ders Adı</label>
+        <input type="text" id="subject-name" class="input-field" placeholder="Matematik, Türkçe, Fen...">
+      </div>
+      <div class="form-group">
+        <label>Renk</label>
+        <div class="color-grid" id="color-grid">
+          <button class="color-swatch selected" data-color="#6366f1" style="background:#6366f1" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#8b5cf6" style="background:#8b5cf6" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#ec4899" style="background:#ec4899" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#f43f5e" style="background:#f43f5e" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#f97316" style="background:#f97316" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#eab308" style="background:#eab308" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#22c55e" style="background:#22c55e" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#14b8a6" style="background:#14b8a6" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#06b6d4" style="background:#06b6d4" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#3b82f6" style="background:#3b82f6" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#a855f7" style="background:#a855f7" onclick="selectColor(this)"></button>
+          <button class="color-swatch" data-color="#d946ef" style="background:#d946ef" onclick="selectColor(this)"></button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('subject-modal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveSubject()">
+          <i class="fas fa-check"></i> Kaydet
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SİL ONAY MODAL ─────────────── -->
+  <div id="confirm-modal" class="overlay" style="display:none;">
+    <div class="modal-box modal-sm">
+      <div class="confirm-icon"><i class="fas fa-triangle-exclamation"></i></div>
+      <h3 id="confirm-title">Emin misin?</h3>
+      <p id="confirm-desc" class="confirm-desc">Bu işlem geri alınamaz.</p>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('confirm-modal')">İptal</button>
+        <button class="btn btn-danger" id="confirm-action-btn">Sil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── TOAST ─────────────── -->
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
