@@ -231,51 +231,66 @@ async function openRecordModal(recordId = null) {
   editingRecordId = recordId;
   await fetchDersler();
 
-  const title = document.getElementById('record-modal-title');
-  const dateInput = document.getElementById('record-date');
-  const subjectSel = document.getElementById('record-subject');
+  const title      = document.getElementById('record-modal-title');
+  const dateInput  = document.getElementById('record-date');
+  const subjectInp = document.getElementById('record-subject');
+  const datalist   = document.getElementById('dersler-list');
   const countInput = document.getElementById('record-count');
   const noteInput  = document.getElementById('record-note');
   const idInput    = document.getElementById('editing-record-id');
 
-  // Populate subject dropdown
-  subjectSel.innerHTML = '<option value="">Ders seçin...</option>';
-  dersler.forEach(d => {
-    subjectSel.innerHTML += `<option value="${d.id}">${escHtml(d.ad)}</option>`;
-  });
+  // Datalist'e mevcut dersleri ekle (öneri olarak göster)
+  datalist.innerHTML = dersler.map(d => `<option value="${escHtml(d.ad)}"></option>`).join('');
 
   if (recordId) {
     title.textContent = 'Kaydı Düzenle';
-    const { data } = await sb.from('gunluk_kayitlar').select('*').eq('id', recordId).single();
+    const { data } = await sb.from('gunluk_kayitlar').select('*, dersler(ad)').eq('id', recordId).single();
     if (data) {
-      dateInput.value    = data.tarih;
-      subjectSel.value   = data.ders_id;
-      countInput.value   = data.soru_sayisi;
-      noteInput.value    = data.not_metni || '';
-      idInput.value      = recordId;
+      dateInput.value   = data.tarih;
+      subjectInp.value  = data.dersler?.ad || '';
+      countInput.value  = data.soru_sayisi;
+      noteInput.value   = data.not_metni || '';
+      idInput.value     = recordId;
     }
   } else {
-    title.textContent  = 'Soru Kaydı Ekle';
-    dateInput.value    = getLocalDate();
-    subjectSel.value   = '';
-    countInput.value   = '';
-    noteInput.value    = '';
-    idInput.value      = '';
+    title.textContent = 'Soru Kaydı Ekle';
+    dateInput.value   = getLocalDate();
+    subjectInp.value  = '';
+    countInput.value  = '';
+    noteInput.value   = '';
+    idInput.value     = '';
   }
 
   openModal('record-modal');
+  subjectInp.focus();
 }
 
 async function saveRecord() {
-  const id      = document.getElementById('editing-record-id').value;
-  const tarih   = document.getElementById('record-date').value;
-  const dersId  = document.getElementById('record-subject').value;
-  const sayisi  = parseInt(document.getElementById('record-count').value, 10);
-  const not     = document.getElementById('record-note').value.trim();
+  const id        = document.getElementById('editing-record-id').value;
+  const tarih     = document.getElementById('record-date').value;
+  const dersAdi   = document.getElementById('record-subject').value.trim();
+  const sayisi    = parseInt(document.getElementById('record-count').value, 10);
+  const not       = document.getElementById('record-note').value.trim();
 
-  if (!tarih)          { showToast('Tarih seçin!', 'error'); return; }
-  if (!dersId)         { showToast('Ders seçin!', 'error'); return; }
+  if (!tarih)                      { showToast('Tarih seçin!', 'error'); return; }
+  if (!dersAdi)                    { showToast('Ders adı girin!', 'error'); return; }
   if (isNaN(sayisi) || sayisi < 0) { showToast('Geçerli bir soru sayısı girin!', 'error'); return; }
+
+  // Ders var mı? Yoksa otomatik oluştur
+  let ders = dersler.find(d => d.ad.toLowerCase() === dersAdi.toLowerCase());
+  if (!ders) {
+    const renkler = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#22c55e','#06b6d4','#3b82f6','#eab308','#14b8a6'];
+    const rastgeleRenk = renkler[Math.floor(Math.random() * renkler.length)];
+    const { data: yeniDers, error: dersErr } = await sb
+      .from('dersler')
+      .insert({ ad: dersAdi, renk: rastgeleRenk })
+      .select()
+      .single();
+    if (dersErr) { showToast('Ders oluşturulamadı: ' + dersErr.message, 'error'); return; }
+    ders = yeniDers;
+    await fetchDersler();
+  }
+  const dersId = ders.id;
 
   const btn = document.getElementById('save-record-btn');
   btn.innerHTML = '<span class="spinner"></span>';
