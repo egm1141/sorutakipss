@@ -6,9 +6,18 @@
 'use strict';
 
 // ═══════════════════════════════════════════
+// USERS (hardcoded)
+// ═══════════════════════════════════════════
+const USERS = [
+  { username: 'Egm1141', password: '1235789', id: 'egm1141' },
+  { username: 'Omr1311', password: 'gg',      id: 'omr1311' },
+];
+
+// ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
 let sb = null;                 // Supabase client
+let currentUser = null;        // Logged-in user object
 let dersler = [];              // Cached subjects
 let selectedColor = '#6366f1'; // Current color in subject modal
 let editingRecordId = null;    // null = new record
@@ -24,6 +33,20 @@ const DEFAULT_URL = 'https://fwvvojlcikqzmlcbeuvp.supabase.co';
 const DEFAULT_KEY = 'sb_publishable_4_tNvk1AE0JfpnsvBMcoTg_eY2GsWCV';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Check if user is already logged in
+  const savedUser = localStorage.getItem('current_user');
+  if (savedUser) {
+    currentUser = USERS.find(u => u.id === savedUser) || null;
+  }
+
+  if (!currentUser) {
+    showLoginModal();
+    return;
+  }
+
+  // Update sidebar username
+  updateSidebarUser();
+
   const url = localStorage.getItem('sb_url') || DEFAULT_URL;
   const key = localStorage.getItem('sb_key') || DEFAULT_KEY;
 
@@ -51,6 +74,81 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ── Supabase init ──
 function initSupabase(url, key) {
   sb = supabase.createClient(url, key);
+}
+
+// ═══════════════════════════════════════════
+// LOGIN / LOGOUT
+// ═══════════════════════════════════════════
+function showLoginModal() {
+  document.getElementById('login-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('login-username').focus(), 100);
+}
+
+function attemptLogin() {
+  const uInput = document.getElementById('login-username').value.trim();
+  const pInput = document.getElementById('login-password').value;
+  const errEl  = document.getElementById('login-error');
+  const btn    = document.getElementById('login-btn');
+
+  const user = USERS.find(
+    u => u.username.toLowerCase() === uInput.toLowerCase() && u.password === pInput
+  );
+
+  if (!user) {
+    errEl.textContent = 'Kullanıcı adı veya şifre hatalı!';
+    errEl.style.display = 'block';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-password').focus();
+    // Shake animation
+    const box = document.querySelector('#login-modal .modal-box');
+    box.classList.remove('shake');
+    void box.offsetWidth;
+    box.classList.add('shake');
+    return;
+  }
+
+  currentUser = user;
+  localStorage.setItem('current_user', user.id);
+  document.getElementById('login-modal').style.display = 'none';
+  updateSidebarUser();
+
+  // Init Supabase after login
+  const url = localStorage.getItem('sb_url') || DEFAULT_URL;
+  const key = localStorage.getItem('sb_key') || DEFAULT_KEY;
+  if (url && key) {
+    try {
+      initSupabase(url, key);
+      navigate('dashboard');
+    } catch(e) { showSetupModal(); }
+  } else {
+    showSetupModal();
+  }
+
+  // Set today's date label
+  const today = new Date();
+  const el = document.getElementById('today-date-label');
+  if (el) el.textContent = formatDateLong(today);
+  const hm = document.getElementById('history-month');
+  if (hm) hm.value = today.toISOString().slice(0, 7);
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('current_user');
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').style.display = 'none';
+  showLoginModal();
+}
+
+function updateSidebarUser() {
+  const el = document.getElementById('sidebar-username');
+  if (el && currentUser) el.textContent = currentUser.username;
+}
+
+// Allow Enter key in login form
+function loginKeyPress(e) {
+  if (e.key === 'Enter') attemptLogin();
 }
 
 // ── Setup modal ──
@@ -143,6 +241,7 @@ async function loadDashboard() {
     .from('gunluk_kayitlar')
     .select('*, dersler(ad, renk)')
     .eq('tarih', todayStr)
+    .eq('user_id', currentUser.id)
     .order('created_at');
 
   if (error) { showToast('Veriler yüklenemedi.', 'error'); return; }
@@ -201,6 +300,7 @@ async function calculateStreak() {
   const { data, error } = await sb
     .from('gunluk_kayitlar')
     .select('tarih')
+    .eq('user_id', currentUser.id)
     .order('tarih', { ascending: false });
 
   if (error || !data || data.length === 0) return 0;
@@ -244,7 +344,7 @@ async function openRecordModal(recordId = null) {
 
   if (recordId) {
     title.textContent = 'Kaydı Düzenle';
-    const { data } = await sb.from('gunluk_kayitlar').select('*, dersler(ad)').eq('id', recordId).single();
+    const { data } = await sb.from('gunluk_kayitlar').select('*, dersler(ad)').eq('id', recordId).eq('user_id', currentUser.id).single();
     if (data) {
       dateInput.value   = data.tarih;
       subjectInp.value  = data.dersler?.ad || '';
@@ -300,7 +400,8 @@ async function saveRecord() {
     tarih,
     ders_id: dersId,
     soru_sayisi: sayisi,
-    not_metni: not || null
+    not_metni: not || null,
+    user_id: currentUser.id
   };
 
   let error;
@@ -363,6 +464,7 @@ async function loadHistory() {
     .select('*, dersler(ad, renk)')
     .gte('tarih', startDate)
     .lte('tarih', endDate)
+    .eq('user_id', currentUser.id)
     .order('tarih', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -426,6 +528,7 @@ async function loadStats() {
   const { data, error } = await sb
     .from('gunluk_kayitlar')
     .select('*, dersler(ad, renk)')
+    .eq('user_id', currentUser.id)
     .order('tarih');
 
   if (error || !data) return;
@@ -577,7 +680,7 @@ function renderSubjectChart(bySubject) {
 // SUBJECTS (DERSLER)
 // ═══════════════════════════════════════════
 async function fetchDersler() {
-  const { data, error } = await sb.from('dersler').select('*').order('created_at');
+  const { data, error } = await sb.from('dersler').select('*').eq('user_id', currentUser.id).order('created_at');
   if (!error && data) dersler = data;
   return dersler;
 }
@@ -598,7 +701,8 @@ async function loadSubjects() {
   // Get question counts per subject
   const { data: counts } = await sb
     .from('gunluk_kayitlar')
-    .select('ders_id, soru_sayisi');
+    .select('ders_id, soru_sayisi')
+    .eq('user_id', currentUser.id);
 
   const countMap = {};
   if (counts) counts.forEach(r => {
@@ -671,7 +775,7 @@ async function saveSubject() {
 
   if (!name) { showToast('Ders adı boş bırakılamaz!', 'error'); return; }
 
-  const payload = { ad: name, renk: selectedColor };
+  const payload = { ad: name, renk: selectedColor, user_id: currentUser.id };
   let error;
 
   if (id) {
