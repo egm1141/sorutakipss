@@ -766,3 +766,84 @@ canvas { max-width: 100%; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .page-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ═══════════════════════════════════════════
+   LOGIN MODAL
+   ═══════════════════════════════════════════ */
+.login-box {
+  max-width: 360px;
+  width: 100%;
+  animation: modalIn 0.35s cubic-bezier(.34,1.56,.64,1);
+}
+
+.login-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+/* Shake animation for wrong password */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  15%      { transform: translateX(-8px); }
+  30%      { transform: translateX(8px); }
+  45%      { transform: translateX(-6px); }
+  60%      { transform: translateX(6px); }
+  75%      { transform: translateX(-3px); }
+  90%      { transform: translateX(3px); }
+}
+.shake {
+  animation: shake 0.5s ease-in-out !important;
+}
+
+/* ═══════════════════════════════════════════
+   SIDEBAR USER & LOGOUT
+   ═══════════════════════════════════════════ */
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--border);
+}
+
+.sidebar-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-grad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.sidebar-user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-link-logout {
+  color: #fca5a5 !important;
+}
+.nav-link-logout:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #f87171 !important;
+}
+.nav-link-logout i {
+  color: #f87171 !important;
+}
