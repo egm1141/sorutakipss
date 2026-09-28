@@ -246,9 +246,10 @@ async function loadDashboard() {
 
   if (error) { showToast('Veriler yüklenemedi.', 'error'); return; }
 
-  // KPIs
-  const total = records.reduce((s, r) => s + r.soru_sayisi, 0);
-  const subjectCount = new Set(records.map(r => r.ders_id)).size;
+  // KPIs – deneme kayıtları toplama dahil edilmez
+  const normalRecords = records.filter(r => !r.is_deneme);
+  const total = normalRecords.reduce((s, r) => s + r.soru_sayisi, 0);
+  const subjectCount = new Set(normalRecords.map(r => r.ders_id)).size;
 
   document.getElementById('kpi-total').textContent    = total;
   document.getElementById('kpi-subjects').textContent  = subjectCount;
@@ -272,9 +273,9 @@ function renderTodayRecords(records) {
 
   container.innerHTML = records.map(r => {
     const ders = r.dersler || { ad: 'Bilinmiyor', renk: '#64748b' };
-    const initials = ders.ad.charAt(0).toUpperCase();
+    const denemeBadge = r.is_deneme ? `<div class="deneme-badge">🎯 Deneme</div>` : '';
     return `
-      <div class="record-card" style="border-left-color:${ders.renk};">
+      <div class="record-card ${r.is_deneme ? 'record-card-deneme' : ''}" style="border-left-color:${ders.renk};">
         <div class="record-header">
           <div class="record-subject">
             <div class="record-dot" style="background:${ders.renk};"></div>
@@ -289,6 +290,7 @@ function renderTodayRecords(records) {
             </button>
           </div>
         </div>
+        ${denemeBadge}
         <div class="record-count" style="color:${ders.renk};">${r.soru_sayisi}</div>
         <div class="record-count-label">soru</div>
         ${r.not_metni ? `<div class="record-note">💬 ${escHtml(r.not_metni)}</div>` : ''}
@@ -331,13 +333,15 @@ async function openRecordModal(recordId = null) {
   editingRecordId = recordId;
   await fetchDersler();
 
-  const title      = document.getElementById('record-modal-title');
-  const dateInput  = document.getElementById('record-date');
-  const subjectInp = document.getElementById('record-subject');
-  const datalist   = document.getElementById('dersler-list');
-  const countInput = document.getElementById('record-count');
-  const noteInput  = document.getElementById('record-note');
-  const idInput    = document.getElementById('editing-record-id');
+  const title        = document.getElementById('record-modal-title');
+  const dateInput    = document.getElementById('record-date');
+  const subjectInp   = document.getElementById('record-subject');
+  const datalist     = document.getElementById('dersler-list');
+  const countInput   = document.getElementById('record-count');
+  const noteInput    = document.getElementById('record-note');
+  const idInput      = document.getElementById('editing-record-id');
+  const denemelabel  = document.getElementById('deneme-toggle-label');
+  const denemeCheck  = document.getElementById('record-is-deneme');
 
   // Datalist'e mevcut dersleri ekle (öneri olarak göster)
   datalist.innerHTML = dersler.map(d => `<option value="${escHtml(d.ad)}"></option>`).join('');
@@ -346,19 +350,21 @@ async function openRecordModal(recordId = null) {
     title.textContent = 'Kaydı Düzenle';
     const { data } = await sb.from('gunluk_kayitlar').select('*, dersler(ad)').eq('id', recordId).eq('user_id', currentUser.id).single();
     if (data) {
-      dateInput.value   = data.tarih;
-      subjectInp.value  = data.dersler?.ad || '';
-      countInput.value  = data.soru_sayisi;
-      noteInput.value   = data.not_metni || '';
-      idInput.value     = recordId;
+      dateInput.value    = data.tarih;
+      subjectInp.value   = data.dersler?.ad || '';
+      countInput.value   = data.soru_sayisi;
+      noteInput.value    = data.not_metni || '';
+      idInput.value      = recordId;
+      denemeCheck.checked = !!data.is_deneme;
     }
   } else {
-    title.textContent = 'Soru Kaydı Ekle';
-    dateInput.value   = getLocalDate();
-    subjectInp.value  = '';
-    countInput.value  = '';
-    noteInput.value   = '';
-    idInput.value     = '';
+    title.textContent   = 'Soru Kaydı Ekle';
+    dateInput.value     = getLocalDate();
+    subjectInp.value    = '';
+    countInput.value    = '';
+    noteInput.value     = '';
+    idInput.value       = '';
+    denemeCheck.checked = false;
   }
 
   openModal('record-modal');
@@ -371,6 +377,7 @@ async function saveRecord() {
   const dersAdi   = document.getElementById('record-subject').value.trim();
   const sayisi    = parseInt(document.getElementById('record-count').value, 10);
   const not       = document.getElementById('record-note').value.trim();
+  const isDeneme  = document.getElementById('record-is-deneme').checked;
 
   if (!tarih)                      { showToast('Tarih seçin!', 'error'); return; }
   if (!dersAdi)                    { showToast('Ders adı girin!', 'error'); return; }
@@ -401,6 +408,7 @@ async function saveRecord() {
     ders_id: dersId,
     soru_sayisi: sayisi,
     not_metni: not || null,
+    is_deneme: isDeneme,
     user_id: currentUser.id
   };
 
@@ -488,14 +496,17 @@ async function loadHistory() {
 
   container.innerHTML = Object.entries(byDay).map(([date, records]) => {
     const total = records.reduce((s, r) => s + r.soru_sayisi, 0);
+    const hasDeneme = records.some(r => r.is_deneme);
+    const hasNormal = records.some(r => !r.is_deneme);
     const dateStr = formatDateLong(new Date(date + 'T12:00:00'));
     const rows = records.map(r => {
       const ders = r.dersler || { ad: '?', renk: '#64748b' };
       return `
-        <div class="history-record-row">
+        <div class="history-record-row ${r.is_deneme ? 'history-deneme-row' : ''}">
           <div class="history-record-left">
             <div class="record-dot" style="background:${ders.renk};width:8px;height:8px;"></div>
             <span style="font-weight:600;color:${ders.renk};">${escHtml(ders.ad)}</span>
+            ${r.is_deneme ? `<span class="history-deneme-tag">🎯 Deneme</span>` : ''}
             <span class="history-record-count">${r.soru_sayisi} soru</span>
             ${r.not_metni ? `<span class="history-record-note">– ${escHtml(r.not_metni)}</span>` : ''}
           </div>
@@ -510,10 +521,13 @@ async function loadHistory() {
         </div>`;
     }).join('');
 
+    // Günün tamamı deneme ise başlığa da belirt
+    const dayLabel = (!hasNormal && hasDeneme) ? ' <span class="day-deneme-label">🎯 Deneme Günü</span>' : '';
+
     return `
       <div class="history-day">
         <div class="history-day-header">
-          <div class="history-day-date">${dateStr}</div>
+          <div class="history-day-date">${dateStr}${dayLabel}</div>
           <div class="history-day-total"><i class="fas fa-pen-nib"></i> ${total} soru</div>
         </div>
         <div class="history-day-body">${rows}</div>
@@ -533,14 +547,27 @@ async function loadStats() {
 
   if (error || !data) return;
 
-  // Overall stats
-  const totalQuestions = data.reduce((s, r) => s + r.soru_sayisi, 0);
-  const uniqueDays = new Set(data.map(r => r.tarih)).size;
-  const avg = uniqueDays > 0 ? Math.round(totalQuestions / uniqueDays) : 0;
-
-  // Best day
+  // Deneme günleri: o günde sadece deneme kayıtları varsa ortalamaya dahil edilmez
   const byDay = {};
-  data.forEach(r => { byDay[r.tarih] = (byDay[r.tarih] || 0) + r.soru_sayisi; });
+  const byDayHasNormal = {}; // o günde normal (deneme dışı) kayıt var mı?
+  data.forEach(r => {
+    byDay[r.tarih] = (byDay[r.tarih] || 0) + r.soru_sayisi;
+    if (!r.is_deneme) byDayHasNormal[r.tarih] = true;
+  });
+
+  // Toplam soru: tüm kayıtlar
+  const totalQuestions = data.reduce((s, r) => s + r.soru_sayisi, 0);
+
+  // Ortalama: sadece en az bir normal kaydı olan günler hesaba katılır
+  const normalDays = Object.keys(byDay).filter(d => byDayHasNormal[d]);
+  const normalDayCount = normalDays.length;
+  const normalTotal = normalDays.reduce((s, d) => s + byDay[d], 0);
+  const avg = normalDayCount > 0 ? Math.round(normalTotal / normalDayCount) : 0;
+
+  // Tüm benzersiz gün sayısı (deneme dahil)
+  const uniqueDays = Object.keys(byDay).length;
+
+  // En iyi gün (tüm günler arasından)
   const bestDay = Math.max(...Object.values(byDay), 0);
 
   document.getElementById('stat-total').textContent = totalQuestions;
@@ -551,7 +578,7 @@ async function loadStats() {
   // Daily chart (last 14 days)
   renderDailyChart(byDay);
 
-  // Subject chart
+  // Subject chart – deneme kayıtları dahil (toplam dağılım için)
   const bySubject = {};
   data.forEach(r => {
     const name  = r.dersler?.ad || 'Diğer';
