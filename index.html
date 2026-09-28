@@ -81,6 +81,7 @@ CREATE TABLE gunluk_kayitlar (
   ders_id UUID REFERENCES dersler(id) ON DELETE CASCADE,
   soru_sayisi INTEGER NOT NULL DEFAULT 0,
   not_metni TEXT,
+  is_deneme BOOLEAN NOT NULL DEFAULT FALSE,
   user_id TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -390,6 +391,13 @@ CREATE POLICY "Public kayitlar" ON gunluk_kayitlar FOR ALL USING (true) WITH CHE
       <div class="form-group">
         <label for="record-note">Not <span class="optional-tag">isteğe bağlı</span></label>
         <input type="text" id="record-note" class="input-field" placeholder="Konu, bölüm, sayfa vb...">
+      </div>
+      <div class="form-group deneme-toggle-group">
+        <label class="deneme-toggle-label" id="deneme-toggle-label">
+          <input type="checkbox" id="record-is-deneme">
+          <span class="deneme-toggle-switch"></span>
+          <span class="deneme-toggle-text">🎯 Deneme Günü <span class="deneme-toggle-hint">(ortalamaya dahil edilmez)</span></span>
+        </label>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="closeModal('record-modal')">İptal</button>
