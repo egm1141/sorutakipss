@@ -847,3 +847,134 @@ canvas { max-width: 100%; }
 .nav-link-logout i {
   color: #f87171 !important;
 }
+
+/* ══════════════════════════════════════════
+   DENEME GÜNÜ
+══════════════════════════════════════════ */
+
+/* Toggle grubu */
+.deneme-toggle-group {
+  margin-top: 0.25rem;
+}
+
+.deneme-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.15);
+  transition: background var(--transition), border-color var(--transition);
+}
+.deneme-toggle-label:hover {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+/* Checkbox gizle */
+.deneme-toggle-label input[type="checkbox"] {
+  display: none;
+}
+
+/* Custom switch */
+.deneme-toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.15);
+  flex-shrink: 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+.deneme-toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #94a3b8;
+  transition: transform var(--transition), background var(--transition);
+}
+.deneme-toggle-label input:checked ~ .deneme-toggle-switch {
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+.deneme-toggle-label input:checked ~ .deneme-toggle-switch::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.deneme-toggle-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.deneme-toggle-label input:checked ~ .deneme-toggle-switch ~ .deneme-toggle-text {
+  color: #fbbf24;
+}
+.deneme-toggle-hint {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 0.25rem;
+}
+
+/* Kart – deneme vurgusu */
+.record-card-deneme {
+  background: rgba(251, 191, 36, 0.05) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+}
+
+/* Badge (bugün kartı içi) */
+.deneme-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Geçmiş satırı – deneme */
+.history-deneme-row {
+  opacity: 0.82;
+  background: rgba(251, 191, 36, 0.04);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.4rem;
+}
+.history-deneme-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  margin-left: 0.25rem;
+}
+
+/* Gün başlığına eklenecek "Deneme Günü" etiketi */
+.day-deneme-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
